@@ -1,0 +1,7 @@
+figures
+output
+src/datasets/adult
+src/datasets/wine/winequality-red.csv
+src/datasets/wine/winequality-white.csv
+.vscode
+.ipynb_checkpoints
