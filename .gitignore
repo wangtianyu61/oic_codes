@@ -5,3 +5,6 @@ src/datasets/wine/winequality-red.csv
 src/datasets/wine/winequality-white.csv
 .vscode
 .ipynb_checkpoints
+.DS_Store
+src/__pycache__
+src/datasets/__pycache__
