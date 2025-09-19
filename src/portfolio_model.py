@@ -30,11 +30,9 @@ class mv_portfolio:
         return np.dot(np.dot(self.return_cov, sol), sol) + self.lambda_2 * np.dot(sol, sol) - self.lambda_1 * np.dot(self.return_mean, sol)
     
     def generate(self, sample_num):
-        # TODO: can change later for misspecified normal...
         sample_data = np.random.multivariate_normal(self.return_mean, self.return_cov, size = sample_num)
         return sample_data
     def true_sol(self):
-        # TODO: need to change as well to adjust for the variance
         result_array = 2 * (self.return_cov + self.lambda_2 * np.identity(self.return_cov.shape[0]))
         self.true_sol_val = np.dot(np.linalg.inv(result_array), self.lambda_1 * self.return_mean)
 
@@ -46,6 +44,9 @@ class mv_portfolio:
 
 
     def normal_idpd_opt(self, sample_data):
+        """
+        solution of ETO under normal distributon
+        """
         mu, sigma2 = self.normal_idpd_pf(sample_data)
 
         sample_num, __ = sample_data.shape
@@ -63,9 +64,11 @@ class mv_portfolio:
         return self.sample_eval(sol, mc_data)
 
     def normal_idpd_pf_correction(self, sol, sample_data, type = 'empirical'):
-        ## empirical: base estimator is the empirical estimator
-        ## parametric: base estimator is the estimator under the parametric distribution
-
+        """
+        bias of ETO under normal distribution
+        - empirical: base estimator is the empirical estimator
+        - parametric: base estimator is the estimator under the parametric distribution
+        """
         mu, sigma2 = self.normal_idpd_pf(sample_data)
         sample_num, __ = sample_data.shape
         # compute the covariance matrix of the asymptotic parametric distribution
@@ -142,6 +145,10 @@ class mv_portfolio:
             return -gradient_interact.numpy()
             
     def chi2_DRO_sol(self, sample_data):
+        """
+        solution of chi2 dro
+        """
+
         sample_size, __ = sample_data.shape
         weight = cp.Variable(self.port_num)
         eta = cp.Variable()
@@ -160,26 +167,15 @@ class mv_portfolio:
         return weight.value
 
     def chi2dro_sol_correction(self, sol, sample_data):
-        # sample_num, __ = sample_data.shape
-        # psi_0 = 0.5
-        # diff = sample_data - self.return_mean
-        # diff_compute = np.zeros((sample_data.shape[0], self.port_num, self.port_num))
-        # for i in range(sample_data.shape[0]):
-        #     diff_compute[i] = np.dot(diff[i].reshape(-1, 1), diff[i].reshape(1, -1)) + self.lambda_2 * np.identity(self.port_num)
-        # I_h_inv = np.linalg.inv(np.mean(diff_compute, axis = 0)) / 2
-        
-        # J_h = np.zeros((sample_data.shape[0], self.port_num, self.port_num))
-        # grad = np.zeros((sample_num, self.port_num))
-        # val = np.zeros(sample_num)
-        # for i in range(sample_data.shape[0]):
-        #     product_term = 2 * np.dot(diff_compute[i], sol) - self.lambda_1 * sample_data[i]
-        #     grad[i] = product_term
-        #     val[i] = self.sample_eval(sol, sample_data[i:(i + 1)])
-        # grad_val_interact = [np.cov(val, grad.T[i])[0][1] for i in range(self.port_num)]
-        # return self.saa_correction(sol, sample_data) - math.sqrt(self.ambiguity_coef / (2 * sample_num * np.var(val))) * np.dot(I_h_inv, grad_val_interact).dot(np.mean(grad, axis = 0))
+        """
+        bias of chi2 dro
+        """
         return self.saa_correction(sol, sample_data)
     
     def saa_sol(self, sample_data):
+        """
+        solution of saa
+        """
         sample_mean = np.mean(sample_data, axis = 0)
         cov_info = np.zeros((sample_data.shape[0], sample_data.shape[1], sample_data.shape[1]))
         for i in range(sample_data.shape[0]):
@@ -196,6 +192,10 @@ class mv_portfolio:
 
 
     def uniform_sol(self, sample_data):
+        """
+        solution of SAA-A
+        """
+
         sample_mean = np.mean(sample_data, axis = 0)
         cov_info = np.zeros((sample_data.shape[0], sample_data.shape[1], sample_data.shape[1]))
         for i in range(sample_data.shape[0]):
@@ -212,6 +212,10 @@ class mv_portfolio:
 
     
     def block_sol(self, sample_data):
+        """
+        solution of SAA-B
+        """
+
         sample_mean = np.mean(sample_data, axis = 0)
         cov_info = np.zeros((sample_data.shape[0], sample_data.shape[1], sample_data.shape[1]))
         sample_size, __ = sample_data.shape
@@ -232,13 +236,6 @@ class mv_portfolio:
         prob.solve(solver = cp.MOSEK)
 
         return weight.value
-
-        
-
-
-        
-
-
 
     def uniform_sol_KDE(self, sample_data):
         sample_num, port_num = sample_data.shape
@@ -316,8 +313,10 @@ class mv_portfolio:
 
 
     def uniform_correction(self, sol, sample_data):
-        #compute the term: \sum_{i,j}^d A + \lambda_2 d
-        #sample_cov = np.cov(sample_data.T)
+        """
+        bias correction of SAA-A
+        """
+
         sample_mean = np.mean(sample_data, axis = 0)
         diff = sample_data - self.return_mean
         diff_compute = np.zeros(sample_data.shape[0])
@@ -378,16 +377,6 @@ class mv_portfolio:
             J_h += torch.mm(jacob_h_x.reshape(-1, 1), jacob_h_x.reshape(1, -1))
         
         return self.IO_correction(I_h / sample_num, J_h / sample_num, sample_num)
-
-
-
-        
-
-
-
-
-
-
 
 
     def uniform_cover_correction_compute(self, sol, sample_data):

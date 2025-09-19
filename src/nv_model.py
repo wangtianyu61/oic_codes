@@ -39,24 +39,17 @@ class newsvendor:
         else:
             raise NotImplementedError
 
-    def debug_saa(self, sample_data):
-        limit_m = 1
-        x = cp.Variable()
-
-        sample_num = sample_data.shape[0]
-        loss = (self.c - self.p) * x
-        for i in range(sample_num):
-            loss += self.p * cp.log_sum_exp(cp.vstack((0, x - sample_data[i]))) / (limit_m * sample_num)
-        prob = cp.Problem(cp.Minimize(loss))
-        prob.solve(solver = cp.SCS)
-        print(x.value)
-        return x.value
-
 
     def saa(self, sample_data):
+        """
+        solution of saa
+        """
         return np.percentile(sample_data, 100 * (1 - self.c / self.p))
     
     def saa_correction(self, sol, sample_data):
+        """
+        bias of saa
+        """
         sample_num = sample_data.shape[0]
         sample_data = sample_data.reshape(-1, 1)
         #rule-of-thumb bandwidth estimator
@@ -79,11 +72,18 @@ class newsvendor:
             return approx_hessian * (self.p - self.c) * self.c / (sample_num * math.exp(log_dens) ** 2 * self.p ** 2)
 
     def normal(self, sample_data):
+        """
+        solution of ETO under normal distribution
+        """
         mu, sigma = np.mean(sample_data), np.std(sample_data)
         return mu + sigma * norm.ppf(1 - self.c / self.p)
 
 
     def normal_correction(self, sol, sample_data):
+        """
+        bias of ETO under normal distribution
+        """
+
         mu, sigma = np.mean(sample_data), np.std(sample_data)
         sample_num = sample_data.shape[0]
 
@@ -99,7 +99,10 @@ class newsvendor:
         return -gradient_interact/(sample_num ** 2)
 
     def normal_correction_MS(self, sol, sample_data):
-        #the debiasing term in their paper
+        """
+        bias estimator of "Data-driven profit estimation error in the newsvendor model", 
+        which assumes the underlying distribution is normal.
+        """
         mu, sigma = np.mean(sample_data), np.std(sample_data)
         quantile_val = norm.ppf(1 - self.c / self.p)
         return -self.p * sigma * (2 + quantile_val ** 2) * norm.pdf(quantile_val) / (4 * len(sample_data))
@@ -118,6 +121,9 @@ class newsvendor:
 
 
     def exp(self, sample_data):
+        """
+        solution of ETO under normal distribution
+        """
         mu = np.mean(sample_data)
         return math.log(self.p / self.c) * mu
         
@@ -144,6 +150,9 @@ class newsvendor:
 
 
     def exp_correction(self, sol, sample_data):
+        """
+        bias of ETO under normal distribution
+        """
         mu = np.mean(sample_data)
         sample_num = sample_data.shape[0]
         gradient_interact = 0
@@ -161,16 +170,25 @@ class newsvendor:
         return -gradient_interact/(sample_num ** 2)
     
     def exp_correction_MS(self, sol, sample_data):
-        #the debiasing term in their paper
+        """
+        bias estimator of "Data-driven profit estimation error in the newsvendor model", 
+        which assumes the underlying distribution is normal.
+        """
         return  -self.c * sol * (math.log(self.p / self.c))** 2/(2 * len(sample_data))
 
     
     def OS_exp(self, sample_data):
+        """
+        solution of operational statistics under exponential distribution
+        """
         mu = np.mean(sample_data)
         sample_num = len(sample_data)
         return sample_num * ((self.p / self.c) ** (1/(sample_num + 1)) - 1) * mu
 
     def OS_exp_correction(self, sol, sample_data):
+        """
+        bias of operational statistics under exponential distribution
+        """
         mu = np.mean(sample_data)
         sample_num = sample_data.shape[0]
         gradient_interact = 0
@@ -227,6 +245,9 @@ class newsvendor:
         return -gradient_interact/(sample_num ** 2 * self.p * math.exp(kde.score_samples(sol.reshape(1, -1))))
 
     def true_eval(self, sol):
+        """
+        true performance of one solution
+        """
         mc_num = 50000
         mc_data = self.generate(mc_num)
         return self.empirical_eval(sol, mc_data) 

@@ -53,6 +53,7 @@ def DRO_compare(sample_num, asset_num):
 
         return return_mean, cov_all
 
+    # hyperparameter list
     rho_list = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
 
     return_mean, cov_all = DGP(asset_num)
@@ -63,8 +64,8 @@ def DRO_compare(sample_num, asset_num):
 
 
 
-    loop_num = 25
-    outer_num = 20
+    loop_num = 50
+    outer_num = 10
 
     model_perform = np.zeros((loop_num, choice_num * len(rho_list)))
     model_avg = np.zeros((outer_num,  choice_num * len(rho_list)))
@@ -82,36 +83,26 @@ def DRO_compare(sample_num, asset_num):
             model_perform[k][0] = mv_model.true_eval(saa_sol)
             model_perform[k][1] = mv_model.sample_eval(saa_sol, data)
             
+        
             model_perform[k][2] = mv_model.saa_correction(saa_sol, data) +  model_perform[k][1]
 
             model_perform[k][3] = mv_model.CV_performance(data, 5, 'saa')
 
-
-            # TODO: add the time count
 
             for j, rho in enumerate(rho_list[1:]):
                 mv_model.ambiguity_coef = rho
                 dro_sol = mv_model.chi2_DRO_sol(data)
                 model_perform[k][choice_num * (j + 1) + 0] = mv_model.true_eval(dro_sol)
                 model_perform[k][choice_num * (j + 1) + 1] = mv_model.sample_eval(dro_sol, data)
-                # TODO: add the time count
-                #start1 = time.time()
+
                 model_perform[k][choice_num * (j + 1) + 2] = model_perform[k][choice_num * j + 1] + mv_model.saa_correction(dro_sol, data)
-                #end1 = time.time()
-                #dro_oic_time += end1 - start1
-                #start2 = time.time()
                 model_perform[k][choice_num * (j + 1) + 3] = mv_model.CV_performance(data, 5, 'chi2dro')
-                #end2 = time.time()
-                #dro_cv_time += end2 - start2
 
         
         model_avg[i] = np.mean(model_perform, axis = 0)
 
-    #print(dro_oic_time/((len(rho_list) - 1) * outer_num * loop_num), dro_cv_time/((len(rho_list) - 1) * outer_num * loop_num))
     final_perform_mean = np.mean(model_avg, axis = 0)
     final_perform_std = np.std(model_avg, axis = 0)
-
-    #fig = plt.figure()
 
 
     marker_choice = ['*', 'o', 'v', '1', '2', '3']
@@ -130,10 +121,7 @@ def DRO_compare(sample_num, asset_num):
     plt.savefig(f'figures/portfolio/DRO_{sample_num}_{asset_num}.pdf')
 
 if __name__ == '__main__':
-    DRO_compare(50, 20)
-    DRO_compare(50, 40)
     DRO_compare(100, 40)
-    DRO_compare(200, 40)
 
 
 
