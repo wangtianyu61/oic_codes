@@ -108,7 +108,7 @@ def run(sample_num, mode):
     import pandas as pd
 
     df = pd.DataFrame(error_avg)
-    #df.to_csv(f'output/nv/nv_{sample_num}_{mode}.csv')
+    df.to_csv(f'output/nv/nv_{sample_num}_{mode}.csv')
 
 
 if __name__ == '__main__':
