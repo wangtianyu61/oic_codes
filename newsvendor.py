@@ -1,15 +1,8 @@
 #!/user/tw2837/.conda/envs/tw2837/bin/python
-import pandas as pd
 import numpy as np
-import math
-from sklearn.neighbors import KernelDensity
-from sklearn.model_selection import KFold
-from scipy.stats import norm
-from sklearn.utils import resample
-import cvxpy as cp
-from scipy.stats import t
 
 from src.nv_model import newsvendor
+from src.paths import output_path
 
     
 
@@ -108,7 +101,7 @@ def run(sample_num, mode):
     import pandas as pd
 
     df = pd.DataFrame(error_avg)
-    df.to_csv(f'output/nv/nv_{sample_num}_{mode}.csv')
+    df.to_csv(output_path('nv', f'nv_{sample_num}_{mode}.csv'))
 
 
 if __name__ == '__main__':

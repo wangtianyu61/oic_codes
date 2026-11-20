@@ -1,19 +1,14 @@
-from functools import partial
 import logging
 import os
 import io
 import re
 from dataclasses import dataclass, field
-from datetime import datetime
 from typing import Tuple, List, Sequence, Optional
 from sklearn.utils import resample
 import copy
-import xgboost as xgb
-import folktables
 import numpy as np
 import pandas as pd
 import torch
-from folktables import state_list
 from scipy.io import arff
 from sklearn import preprocessing
 from sklearn.model_selection import train_test_split
@@ -21,17 +16,9 @@ import src.datasets
 from src.datasets import TGT, Dataset, DATASET_ROOT, DEFAULT_TRAIN_FRAC, \
     DatasetConfig, SENS_RACE, SENS_SEX, SENS_AGE
 
-# from src.datasets.brfss_utils import BRFSS_FEATURES
-# from src.compas_utils import preprocess_compas
-
-# from src.torchutils import pd_to_torch_float
-
-
 # classification
 ADULT = 'adult'
-BRFSS = 'brfss'
 CANDC = "communities-and-crime"
-COMPAS = "compas"
 GERMAN = "german"
 
 
@@ -98,25 +85,23 @@ def scale_data(df_tr, df_te, df_val, cols_to_preserve: Sequence[str] = None):
     """Scale numeric train/test data columns using the *train* data statistics.
     """
     scaler = preprocessing.StandardScaler()
-    columns_to_scale = set(get_numeric_columns(df_tr))
-    
-    unscaled_columns = (set(df_tr.columns) - set(columns_to_scale))
-    if cols_to_preserve:
-        columns_to_scale -= set(cols_to_preserve)
-        unscaled_columns.update(cols_to_preserve)
-        columns_to_scale = list(columns_to_scale)
+    preserve = set(cols_to_preserve or [])
+    columns_to_scale = [c for c in get_numeric_columns(df_tr) if c not in preserve]
+    unscaled_columns = [c for c in df_tr.columns if c not in columns_to_scale]
+    if not columns_to_scale:
+        return df_tr.copy(), df_te.copy(), df_val.copy()
     
     df_tr_scaled = pd.DataFrame(scaler.fit_transform(df_tr[columns_to_scale]),
-                                columns=columns_to_scale)
+                                columns=columns_to_scale, index=df_tr.index)
 
     df_tr_out = pd.concat((df_tr_scaled, df_tr[unscaled_columns]), axis=1)
 
     df_te_scaled = pd.DataFrame(scaler.transform(df_te[columns_to_scale]),
-                                columns=columns_to_scale)
+                                columns=columns_to_scale, index=df_te.index)
     df_te_out = pd.concat((df_te_scaled, df_te[unscaled_columns]), axis=1)
 
     df_val_scaled = pd.DataFrame(scaler.transform(df_val[columns_to_scale]),
-                                 columns=columns_to_scale)
+                                 columns=columns_to_scale, index=df_val.index)
     df_val_out = pd.concat((df_val_scaled, df_val[unscaled_columns]), axis=1)
 
     return df_tr_out, df_te_out, df_val_out
@@ -166,9 +151,15 @@ def label_encode_cols(df_tr, df_te, df_val) -> Tuple[
 def bytes_features_to_string(df):
     """Convert all bytes features to string, in place."""
     for col, dtype in df.dtypes.items():
-        if dtype == np.object:  # Only process byte object columns.
-            df[col] = df[col].apply(lambda x: x.decode("utf-8"))
+        if pd.api.types.is_object_dtype(dtype):
+            df[col] = df[col].apply(
+                lambda x: x.decode("utf-8") if isinstance(x, bytes) else x)
     return
+
+
+def pd_to_torch_float(data):
+    """Copy a numeric DataFrame or Series to a float32 tensor."""
+    return torch.tensor(data.to_numpy(copy=True), dtype=torch.float32)
 
 
 def dataframes_to_dataset(X, y, use_sens=False,
@@ -731,90 +722,8 @@ class BoneMarrowDataset(TabularDataset):
         self._postprocess_data(df)
         return
 
-@dataclass
-class BRFSSDatasetConfig(TabularDatasetConfig):
-    sens: list = field(default_factory=lambda: [SENS_RACE, SENS_SEX])
-    year: int = 2015
 
 
-class BRFSSDataset(TabularDataset):
-    """Behavioral Risk Factors Surveillance Survey Dataset.
-
-    Accessed via https://www.kaggle.com/datasets/cdc/behavioral-risk-factor-surveillance-system.
-    Raw Data: https://www.cdc.gov/brfss/annual_data/annual_data.htm
-    Data Dictionary: https://www.cdc.gov/brfss/annual_data/2015/pdf/codebook15_llcp.pdf
-    Related work: https://www.cdc.gov/pcd/issues/2019/19_0109.htm
-    """
-
-    def __init__(self, year: int, use_cache: bool = True, **kwargs):
-        del use_cache
-        self.year = year
-        super().__init__(**kwargs, name=BRFSS)
-
-    def _load(self) -> None:
-        root_dir = self.get_dataset_root_dir()
-
-        df = pd.read_csv(os.path.join(root_dir, f"{self.year}.csv"),
-                         usecols=BRFSS_FEATURES)
-        # Label
-        df["DIABETE3"].replace({2: 0, 3: 0, 4: 0}, inplace=True)
-        # Drop 1k missing/not sure, plus one missing observation
-        df = df[~(df["DIABETE3"].isin([7, 9]))].dropna(subset=["DIABETE3"])
-        df.rename(columns={"DIABETE3": TGT}, inplace=True)
-
-        # Sensitive columns
-        # Drop no preferred race/not answered/don't know/not sure
-        df = df[~(df["_PRACE1"].isin([7, 8, 77, 99]))]
-        df[SENS_RACE] = (df["_PRACE1"] == 1).astype(int)
-        df[SENS_SEX] = (df["SEX"] - 1)  # Map sex to male=0, female=1
-
-        df.drop(["_PRACE1", "SEX"], axis=1, inplace=True)
-
-        # PHYSHLTH, POORHLTH, MENTHLTH are measured in days, but need to
-        # map 88 to 0 because it means zero (i.e. zero bad health days)
-        df["PHYSHLTH"] = df["PHYSHLTH"].replace({88: 0})
-        df["MENTHLTH"] = df["MENTHLTH"].replace({88: 0})
-
-        # Drop rows where drinks per week is unknown/refused/missing;
-        # this uses a different missingness code from other variables.
-        df = df[~(df["_DRNKWEK"] == 99900)]
-
-        # Some questions are not asked for various reasons
-        # (see notes under "BLANK" for that question in data dictionary);
-        # create an indicator for these due to large fraction of missingness.
-        df["SMOKDAY2"] = df["SMOKDAY2"].fillna("NOTASKED_MISSING").astype(str)
-        df["TOLDHI2"] = df["TOLDHI2"].fillna("NOTASKED_MISSING").astype(str)
-
-        NUMERIC_COLS = ("_BMI5", "_DRNKWEK", "PHYSHLTH", "MENTHLTH", "PA1MIN_")
-        # For these categorical columns, drop respondents who were not sure,
-        # refused, or had missing responses. This is also important because
-        # sometimes those responses (dk/refuse/missing) are lumped into
-        # a single category (e.g. "_TOTINDA").
-        DROP_MISSING_REFUSED_COLS = (
-            "MEDCOST", "PHYSHLTH", "_RFHYPE5", "_CHOLCHK", "SMOKE100",
-            "SMOKDAY2", "TOLDHI2", "CVDSTRK3", "_TOTINDA", "_FRTLT1",
-            "_VEGLT1", "_RFBING5", "PA1MIN_", "INCOME2", "MARITAL", "CHECKUP1",
-            "EDUCA", "_MICHD", "_BMI5", "_BMI5CAT",
-        )
-        for c in DROP_MISSING_REFUSED_COLS:
-            start_sz = len(df)
-            if c not in NUMERIC_COLS:
-                # Apply coded values for missing/refused/idk, for categorical cols.
-                # Note that 88 is sometimes used for for these, but 8 is NOT
-                # and constitutes a valid value in the above columns.
-                df = df[~(df[c].isin([7, 9, 77, 88, 99]))]
-            # Drop actual missing values, for all column dtypes
-            df.dropna(subset=[c], inplace=True)
-            # print("filtered {} remaining rows ({:.4f}%) using column {}".format(
-            #     start_sz - len(df), 100 * (start_sz - len(df))/start_sz, c))
-
-        for c in df.columns:
-            if c not in NUMERIC_COLS and c not in self.sens and c != TGT:
-                # First cast to string, since some columns may contain mixed
-                # types due to fillna step.
-                df[c] = df[c].astype("category")
-
-        self._postprocess_data(df)
 
 
 @dataclass
@@ -869,35 +778,8 @@ class CommunitiesAndCrimeDataset(TabularDataset):
         self._postprocess_data(data)
         return
 
-@dataclass
-class CompasDatasetConfig(TabularDatasetConfig):
-    sens: list = field(default_factory=lambda: [SENS_SEX, SENS_RACE])
-    name: str = COMPAS
 
 
-class CompasDataset(TabularDataset):
-    def __init__(self, **kwargs):
-        del kwargs['use_cache']
-        super().__init__(**kwargs)
-
-    def _load(self) -> None:
-        assert not self.is_regression, "COMPAS is a binary task."
-        root_dir = self.get_dataset_root_dir()
-        df = pd.read_csv(os.path.join(root_dir, "compas-scores-two-years.csv"))
-        df = preprocess_compas(df)
-
-        # privileged group (white) is coded as 1. Note that 'male' is also
-        # coded as 1, by default (see
-        # https://github.com/propublica/compas-analysis/blob/master/Compas%20Analysis.ipynb)
-
-        df[SENS_RACE] = (df['race'] == 0).astype(int)
-        target_variable = 'is_recid'
-        df.rename(columns={target_variable: TGT}, inplace=True)
-
-        # Convert the binary feature to categorical, so it is not normalized
-        df['c_charge_degree'] = df['c_charge_degree'].astype(str)
-
-        self._postprocess_data(df)
 
 
 @dataclass
@@ -1071,13 +953,9 @@ def get_dataset_config(dataset, **kwargs):
         return BoneMarrowDatasetConfig(**kwargs)
     elif dataset == src.datasets.tabular.ADULT:
         return AdultDatasetConfig(**kwargs)
-    elif dataset == 'compas':
-        return CompasDatasetConfig(**kwargs)
     elif dataset == src.datasets.tabular.GERMAN:
         return GermanDatasetConfig(**kwargs)
     elif dataset == src.datasets.tabular.CANDC:
         return CommunitiesAndCrimeDatasetConfig(**kwargs)
-    elif dataset == src.datasets.tabular.BRFSS:
-        return BRFSSDatasetConfig(**kwargs)
     else:
         raise NotImplementedError

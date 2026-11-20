@@ -1,7 +1,7 @@
 import torch
 from torch.autograd.functional import hessian, jacobian
 from torch.func import functional_call
-from src.models import *
+from src.models import MLP, set_device
 from tqdm import tqdm
 
 feature_dim = 15

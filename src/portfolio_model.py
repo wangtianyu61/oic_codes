@@ -1,5 +1,4 @@
 # mean-variance portfolio allocation
-import pandas as pd
 import numpy as np
 import math
 import cvxpy as cp
@@ -9,7 +8,7 @@ from sklearn.utils import resample
 from torch.autograd.functional import jacobian
 from torch.autograd.functional import hessian
 import torch
-from scipy.stats import chi2, norm, multivariate_normal, t
+from scipy.stats import chi2, multivariate_normal
 from sklearn.neighbors import KernelDensity
 
 

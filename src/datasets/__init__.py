@@ -3,10 +3,11 @@ from dataclasses import dataclass
 from typing import Tuple
 
 from torch.utils.data import DataLoader
+from src.paths import DATA_ROOT
 
 # SENS = "sensitive"  # name of sensitive column
 TGT = "target"  # name of target column
-DATASET_ROOT = "src/datasets"
+DATASET_ROOT = str(DATA_ROOT)
 DEFAULT_TRAIN_FRAC = 0.1  # remaining data split evenly between val/test
 SPLIT_RANDOM_STATE = 75534  # optional fixed random state for train-test splits
 
