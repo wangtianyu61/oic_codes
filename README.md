@@ -45,15 +45,7 @@ python -m pip install \
   Mosek==10.2.19 matplotlib==3.5.0 seaborn==0.13.2 tqdm==4.67.1
 ```
 
-The portfolio experiments explicitly use the MOSEK solver through CVXPY. A working MOSEK installation and license are therefore required; see the [MOSEK installation guide](https://docs.mosek.com/latest/pythonapi/install-interface.html) and [license setup instructions](https://docs.mosek.com/latest/licensing/quickstart.html). To run the figure-generation notebooks, also install Jupyter and an IPython kernel:
-
-```bash
-python -m pip install notebook ipykernel
-```
-
-The experiments can run on a CPU. For neural-network regression, the code uses a CUDA-capable GPU when available and otherwise falls back to the CPU. The default scripts use 20 outer repetitions with 50 training datasets per repetition for the portfolio experiment, 50 outer repetitions with 100 training datasets per repetition for the newsvendor experiment, and 100 repetitions for regression. Cross-validation and bootstrap comparisons require additional model fits. With `model_class = 'nn'`, regression uses two hidden layers of eight units, 501 training epochs per fit, and five-fold cross-validation by default; calculating the standard OIC Hessian also adds computation.
-
-[To fill: hardware used for the paper and wall-clock runtimes for the full experiment runs.]
+The portfolio experiments explicitly use the MOSEK solver through CVXPY. A working MOSEK installation and license are therefore required; see the [MOSEK installation guide](https://docs.mosek.com/latest/pythonapi/install-interface.html) and [license setup instructions](https://docs.mosek.com/latest/licensing/quickstart.html). 
 
 ## Repository Layout
 The `src` folder include source codes of the three setups in Section 5. 
