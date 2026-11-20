@@ -3,7 +3,6 @@ import importlib.util
 import io
 from pathlib import Path
 import sys
-import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -37,19 +36,19 @@ class SaaPortfolioTests(unittest.TestCase):
         self.assertTrue(callable(module.main))
         self.assertEqual(plt.get_fignums(), figures)
 
-    def test_reduced_experiment_plots_both_sample_sizes_and_saves_pdf(self):
+    def test_reduced_experiment_plots_both_sample_sizes_and_renders_pdf(self):
         module = load_script()
         module.loop_num = 2
         module.outer_num = 2
         module.asset_nums = [2, 4]
         self.assertIs(module.mv_portfolio, mv_portfolio)
-        with tempfile.TemporaryDirectory() as temporary, \
-                patch.object(paths, 'OUTPUT_ROOT', Path(temporary) / 'output'), \
+        pdf = io.BytesIO()
+        with patch.object(module, 'figure_path', return_value=pdf) as target, \
+                plt.rc_context({'savefig.format': 'pdf'}), \
                 contextlib.redirect_stdout(io.StringIO()):
             module.main()
-            target = Path(temporary) / 'output/figures/portfolio/test2.pdf'
-            self.assertTrue(target.is_file())
-            self.assertGreater(target.stat().st_size, 0)
+            target.assert_called_once_with('portfolio', 'test2.pdf')
+            self.assertTrue(pdf.getvalue().startswith(b'%PDF-'))
             curves = [line for line in plt.gca().lines if not line.get_label().startswith('_')]
             self.assertEqual(len(curves), 6)
             self.assertEqual([line.get_linestyle() for line in curves], ['-'] * 3 + ['--'] * 3)
